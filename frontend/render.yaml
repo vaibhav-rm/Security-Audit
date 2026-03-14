@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: prawl
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120 --chdir /opt/render/project/src
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: FLASK_DEBUG
+        value: false
+      - key: ALLOWED_ORIGINS
+        value: "*"
+    disk:
+      name: prawl-data
+      mountPath: /opt/render/project/src/backend
+      sizeGB: 1
