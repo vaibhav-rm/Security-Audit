@@ -1,0 +1,69 @@
+name: prawl
+
+# ─────────────────────────────────────────────────────────────
+#  PRAWL — Docker Compose
+#
+#  Services
+#  ├── prawl        Flask app (port 5000)
+#  └── pull-tools   One-shot: pre-pulls Nmap / Nikto / SQLMap images
+#                   so the first scan doesn't wait for a download
+#
+#  Usage
+#  ──────
+#  docker compose up --build          # first run
+#  docker compose up -d               # background
+#  docker compose logs -f prawl       # live logs
+#  docker compose down                # stop & remove containers
+# ─────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Main app ────────────────────────────────────────────────
+  prawl:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: prawl-app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - PORT=5000
+      - FLASK_ENV=production
+    volumes:
+      # Mount Docker socket so PRAWL can launch scanner containers
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Persist generated PDF reports
+      - reports:/app/backend/reports
+    depends_on:
+      pull-tools:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── Pre-pull scanner images (runs once, then exits) ─────────
+  pull-tools:
+    image: docker:cli
+    container_name: prawl-pull-tools
+    restart: "no"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: >
+      sh -c "
+        echo '🐋 Pre-pulling scanner images...' &&
+        docker pull instrumentisto/nmap  && echo '✅ Nmap ready'   &&
+        docker pull frapsoft/nikto       && echo '✅ Nikto ready'  &&
+        docker pull secsi/sqlmap         && echo '✅ SQLMap ready' &&
+        echo '🚀 All scanner tools ready!'
+      "
+
+volumes:
+  reports:
+    name: prawl-reports

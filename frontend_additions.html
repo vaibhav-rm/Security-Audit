@@ -1,0 +1,371 @@
+<!--
+════════════════════════════════════════════════════════════════════
+ADD THIS TO  frontend/templates/index.html
+
+1. Paste the <style> block inside your <style> or <head>
+2. Paste the HTML panel after your existing scan results section
+3. Paste the <script> block at the bottom before </body>
+════════════════════════════════════════════════════════════════════
+-->
+
+
+<!-- ══ 1. STYLES ══════════════════════════════════════════════ -->
+<style>
+/* ── Advanced Scan Panel ── */
+#advanced-scan-section {
+  margin-top: 2rem;
+  border: 1.5px solid #334155;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+#advanced-scan-section .panel-header {
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  padding: 1rem 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+#advanced-scan-section .panel-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #f1f5f9;
+}
+
+.tool-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.badge-nmap   { background:#1d4ed8; color:#bfdbfe; }
+.badge-nikto  { background:#7c3aed; color:#ede9fe; }
+.badge-sqlmap { background:#dc2626; color:#fee2e2; }
+
+.consent-box {
+  background: #1c1917;
+  border: 1px solid #78350f;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  margin: 1rem 1.5rem 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  color: #fbbf24;
+}
+.consent-box input[type=checkbox] { margin-top: 2px; accent-color: #f59e0b; }
+
+#btn-advanced-scan {
+  margin: 1rem 1.5rem 1.5rem;
+  background: linear-gradient(135deg, #1d4ed8, #7c3aed);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.7rem 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .2s;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+#btn-advanced-scan:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.adv-tool-result {
+  margin: 0 1.5rem 1.5rem;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.adv-tool-result .tool-title {
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.adv-tool-result.nmap   .tool-title { background:#1e3a8a; color:#93c5fd; }
+.adv-tool-result.nikto  .tool-title { background:#4c1d95; color:#c4b5fd; }
+.adv-tool-result.sqlmap .tool-title { background:#7f1d1d; color:#fca5a5; }
+
+.adv-tool-result .tool-body {
+  background: #0f172a;
+  padding: 1rem;
+  font-size: 0.82rem;
+  color: #cbd5e1;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.finding-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #1e293b;
+}
+.finding-row:last-child { border-bottom: none; }
+
+.sev-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  min-width: 60px;
+  text-align: center;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+.sev-critical { background:#7f1d1d; color:#fca5a5; }
+.sev-high     { background:#7c2d12; color:#fdba74; }
+.sev-medium   { background:#713f12; color:#fde68a; }
+.sev-info     { background:#1e3a5f; color:#93c5fd; }
+
+.docker-warning {
+  margin: 1rem 1.5rem;
+  background: #1c1917;
+  border: 1px solid #57534e;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  font-size: 0.82rem;
+  color: #a8a29e;
+  display: none;
+}
+</style>
+
+
+<!-- ══ 2. HTML PANEL (paste after your existing results section) ══ -->
+
+<div id="advanced-scan-section" style="display:none;">
+
+  <div class="panel-header">
+    <span>🔬</span>
+    <h3>Advanced Vulnerability Scan</h3>
+    <span class="tool-badge badge-nmap">Nmap</span>
+    <span class="tool-badge badge-nikto">Nikto</span>
+    <span class="tool-badge badge-sqlmap">SQLMap</span>
+  </div>
+
+  <!-- Docker not available warning -->
+  <div id="docker-warning" class="docker-warning">
+    🐋 Docker Desktop is not running. Start Docker Desktop and refresh the page to enable advanced scans.
+  </div>
+
+  <!-- SQLMap consent -->
+  <div class="consent-box" id="sqlmap-consent-box">
+    <input type="checkbox" id="sqlmap-consent" />
+    <label for="sqlmap-consent">
+      <strong>I confirm</strong> I own or have written permission to test this website.
+      I understand SQLMap sends attack payloads to detect SQL injection vulnerabilities.
+    </label>
+  </div>
+
+  <button id="btn-advanced-scan" onclick="runAdvancedScan()">
+    <span id="adv-scan-icon">🔬</span>
+    <span id="adv-scan-label">Run Advanced Scan</span>
+  </button>
+
+  <!-- Results rendered here -->
+  <div id="adv-results-nmap"   class="adv-tool-result nmap"   style="display:none;">
+    <div class="tool-title">🗺️ Nmap — Port &amp; Service Scan</div>
+    <div class="tool-body" id="adv-body-nmap"></div>
+  </div>
+
+  <div id="adv-results-nikto"  class="adv-tool-result nikto"  style="display:none;">
+    <div class="tool-title">🕷️ Nikto — Web Vulnerability Scan</div>
+    <div class="tool-body" id="adv-body-nikto"></div>
+  </div>
+
+  <div id="adv-results-sqlmap" class="adv-tool-result sqlmap" style="display:none;">
+    <div class="tool-title">💉 SQLMap — SQL Injection Test</div>
+    <div class="tool-body" id="adv-body-sqlmap"></div>
+  </div>
+
+</div>
+
+
+<!-- ══ 3. JAVASCRIPT ══════════════════════════════════════════ -->
+<script>
+// ── Check Docker on page load ──────────────────────────────────
+async function checkDockerStatus() {
+  try {
+    const res  = await fetch("/api/docker-status");
+    const data = await res.json();
+    if (data.available) {
+      document.getElementById("advanced-scan-section").style.display = "block";
+      document.getElementById("docker-warning").style.display = "none";
+    } else {
+      document.getElementById("advanced-scan-section").style.display = "block";
+      document.getElementById("docker-warning").style.display  = "block";
+      document.getElementById("btn-advanced-scan").disabled    = true;
+    }
+  } catch {
+    // silently hide the section if the check itself fails
+  }
+}
+
+// Show the advanced section only after a normal scan has run
+// Call this from your existing scan-complete handler:
+//   showAdvancedScanSection();
+function showAdvancedScanSection() {
+  checkDockerStatus();   // also checks Docker availability
+}
+
+// ── Severity badge helper ──────────────────────────────────────
+function sevBadge(sev) {
+  sev = (sev || "info").toLowerCase();
+  return `<span class="sev-badge sev-${sev}">${sev}</span>`;
+}
+
+// ── Render Nmap results ────────────────────────────────────────
+function renderNmap(data) {
+  const el = document.getElementById("adv-body-nmap");
+  if (data.error) { el.innerHTML = `<p style="color:#f87171">${data.error}</p>`; return; }
+
+  let html = "";
+
+  if (data.risk_findings && data.risk_findings.length) {
+    html += `<p style="color:#f87171;margin:0 0 .5rem"><strong>⚠️ ${data.risk_findings.length} risky port(s) found</strong></p>`;
+    data.risk_findings.forEach(f => {
+      html += `<div class="finding-row">
+        ${sevBadge(f.severity)}
+        <div><strong>Port ${f.port} (${f.service})</strong>${f.version ? ` — ${f.version}` : ""}<br>
+        <span style="color:#94a3b8">${f.description}</span></div>
+      </div>`;
+    });
+  }
+
+  if (data.ports && data.ports.length) {
+    html += `<p style="margin:.75rem 0 .4rem;color:#94a3b8"><strong>All open ports:</strong></p>`;
+    data.ports.forEach(p => {
+      html += `<div class="finding-row">
+        <span style="color:#38bdf8;min-width:60px"><strong>${p.port}</strong></span>
+        <span>${p.service}${p.product ? " / " + p.product : ""}${p.version ? " " + p.version : ""}</span>
+      </div>`;
+    });
+  }
+
+  if (!html) html = `<p style="color:#4ade80">✅ No dangerous open ports detected on scanned port list.</p>`;
+  el.innerHTML = html;
+  document.getElementById("adv-results-nmap").style.display = "block";
+}
+
+// ── Render Nikto results ───────────────────────────────────────
+function renderNikto(data) {
+  const el = document.getElementById("adv-body-nikto");
+  if (data.error) { el.innerHTML = `<p style="color:#f87171">${data.error}</p>`; return; }
+
+  let html = "";
+  if (data.server_banner) {
+    html += `<p style="margin:0 0 .5rem;color:#94a3b8">Server: <strong style="color:#e2e8f0">${data.server_banner}</strong></p>`;
+  }
+
+  if (data.vulnerabilities && data.vulnerabilities.length) {
+    html += `<p style="margin:0 0 .4rem;color:#f87171"><strong>${data.findings_count} finding(s)</strong></p>`;
+    data.vulnerabilities.forEach(v => {
+      html += `<div class="finding-row">
+        ${sevBadge(v.severity)}
+        <div>${v.description}${v.reference ? ` <span style="color:#60a5fa">[${v.reference}]</span>` : ""}</div>
+      </div>`;
+    });
+  } else {
+    html += `<p style="color:#4ade80">✅ Nikto found no significant web vulnerabilities.</p>`;
+  }
+
+  el.innerHTML = html;
+  document.getElementById("adv-results-nikto").style.display = "block";
+}
+
+// ── Render SQLMap results ──────────────────────────────────────
+function renderSqlmap(data) {
+  const el = document.getElementById("adv-body-sqlmap");
+
+  if (data.skipped) {
+    el.innerHTML = `<p style="color:#94a3b8">⏭️ SQLMap skipped — consent checkbox was not ticked.</p>`;
+    document.getElementById("adv-results-sqlmap").style.display = "block";
+    return;
+  }
+  if (data.error) { el.innerHTML = `<p style="color:#f87171">${data.error}</p>`; return; }
+
+  let html = "";
+  const color = data.injectable ? "#f87171" : "#4ade80";
+  html += `<p style="color:${color}"><strong>${data.summary}</strong></p>`;
+
+  if (data.injectable) {
+    if (data.dbms) html += `<div class="finding-row">${sevBadge("critical")}<div>Database: <strong>${data.dbms}</strong></div></div>`;
+    if (data.parameters && data.parameters.length) {
+      html += `<div class="finding-row">${sevBadge("critical")}<div>Vulnerable parameters: <strong>${data.parameters.join(", ")}</strong></div></div>`;
+    }
+    if (data.injections && data.injections.length) {
+      html += `<p style="margin:.6rem 0 .3rem;color:#94a3b8">Injection techniques:</p>`;
+      data.injections.forEach(i => {
+        html += `<div class="finding-row"><span style="color:#fca5a5">▸</span><span>${i}</span></div>`;
+      });
+    }
+  }
+
+  el.innerHTML = html;
+  document.getElementById("adv-results-sqlmap").style.display = "block";
+}
+
+// ── Main advanced scan function ────────────────────────────────
+async function runAdvancedScan() {
+  // Get URL from whichever input your existing form uses
+  const urlInput = document.getElementById("url") || document.querySelector("input[type=url], input[name=url]");
+  const url = urlInput ? urlInput.value.trim() : "";
+  if (!url) { alert("Please enter a URL in the main scan box first."); return; }
+
+  const consent = document.getElementById("sqlmap-consent").checked;
+
+  // Reset UI
+  ["nmap", "nikto", "sqlmap"].forEach(t => {
+    document.getElementById(`adv-results-${t}`).style.display = "none";
+    document.getElementById(`adv-body-${t}`).innerHTML = "";
+  });
+
+  const btn   = document.getElementById("btn-advanced-scan");
+  const label = document.getElementById("adv-scan-label");
+  const icon  = document.getElementById("adv-scan-icon");
+
+  btn.disabled = true;
+  icon.textContent  = "⏳";
+  label.textContent = "Scanning… this may take 2–3 minutes";
+
+  try {
+    const res  = await fetch("/api/advanced-scan", {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ url, sqlmap_consent: consent }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert("Scan error: " + (err.error || res.statusText));
+      return;
+    }
+
+    const data = await res.json();
+    if (data.error) { alert("Error: " + data.error); return; }
+
+    if (data.nmap)   renderNmap(data.nmap);
+    if (data.nikto)  renderNikto(data.nikto);
+    if (data.sqlmap) renderSqlmap(data.sqlmap);
+
+  } catch (err) {
+    alert("Request failed: " + err.message);
+  } finally {
+    btn.disabled     = false;
+    icon.textContent  = "🔬";
+    label.textContent = "Run Advanced Scan";
+  }
+}
+
+// Auto-check Docker when the page loads
+document.addEventListener("DOMContentLoaded", () => {
+  checkDockerStatus();
+});
+</script>

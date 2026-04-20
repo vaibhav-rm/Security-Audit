@@ -1,0 +1,34 @@
+# Git
+.git
+.gitignore
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment secrets — never bake into image
+.env
+
+# Dev / editor files
+.vscode/
+*.bat
+frontend_additions.html
+app_routes_to_add.py
+test_*.py
+
+# Reports (mounted as volume at runtime)
+backend/reports/
+
+# Docs
+README.md
