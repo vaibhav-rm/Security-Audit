@@ -3,11 +3,8 @@ PRAWL AI Chatbot — Security Assistant
 Answers questions about scan results in plain English.
 Uses Groq (free) → Anthropic → OpenRouter → Smart Rule-based fallback.
 """
-import os, requests, json
+import os, json
 
-GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
-ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
-OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
 
 SYSTEM_PROMPT = """You are PRAWL, a friendly AI cybersecurity assistant built specifically for Indian small business owners.
 
@@ -113,44 +110,43 @@ User Question: {user_message}"""
 
 
 def chat_via_groq(user_message, scan_context, chat_history):
-    """Groq — 100% free, fast LLaMA 3"""
-    if not GROQ_API_KEY:
+    """Groq — 100% free, extremely fast LLaMA 3.3 70B"""
+    groq_key = os.environ.get('GROQ_API_KEY', '')
+    if not groq_key:
         return None
     try:
-        messages = build_messages(user_message, scan_context, chat_history)
-        r = requests.post(
-            'https://api.groq.com/openai/v1/chat/completions',
-            headers={
-                'Authorization': f'Bearer {GROQ_API_KEY}',
-                'Content-Type': 'application/json'
-            },
-            json={
-                'model': 'llama3-8b-8192',
-                'messages': [{'role': 'system', 'content': SYSTEM_PROMPT}] + messages,
-                'max_tokens': 300,
-                'temperature': 0.7
-            },
-            timeout=15
+        import httpx
+        from groq import Groq
+        client = Groq(
+            api_key=groq_key,
+            http_client=httpx.Client()
         )
-        if r.status_code == 200:
-            return r.json()['choices'][0]['message']['content'].strip()
-        return None
+        messages = build_messages(user_message, scan_context, chat_history)
+        
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{'role': 'system', 'content': SYSTEM_PROMPT}] + messages,
+            max_tokens=400,
+            temperature=0.7
+        )
+        return response.choices[0].message.content.strip()
     except Exception as e:
-        print(f"Groq error: {e}")
+        print(f"Groq API error: {e}")
         return None
 
 
 def chat_via_anthropic(user_message, scan_context, chat_history):
     """Anthropic Claude — paid, best quality"""
-    if not ANTHROPIC_API_KEY:
+    anthropic_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    if not anthropic_key:
         return None
     try:
         import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        client = anthropic.Anthropic(api_key=anthropic_key)
         messages = build_messages(user_message, scan_context, chat_history)
         msg = client.messages.create(
-            model='claude-sonnet-4-20250514',
-            max_tokens=300,
+            model='claude-3-5-sonnet-20241022',
+            max_tokens=400,
             system=SYSTEM_PROMPT,
             messages=messages
         )
@@ -162,14 +158,16 @@ def chat_via_anthropic(user_message, scan_context, chat_history):
 
 def chat_via_openrouter(user_message, scan_context, chat_history):
     """OpenRouter — free tier with Mistral"""
-    if not OPENROUTER_API_KEY:
+    or_key = os.environ.get('OPENROUTER_API_KEY', '')
+    if not or_key:
         return None
     try:
+        import requests
         messages = build_messages(user_message, scan_context, chat_history)
         r = requests.post(
             'https://openrouter.ai/api/v1/chat/completions',
             headers={
-                'Authorization': f'Bearer {OPENROUTER_API_KEY}',
+                'Authorization': f'Bearer {or_key}',
                 'Content-Type': 'application/json'
             },
             json={

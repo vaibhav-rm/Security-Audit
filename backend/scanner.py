@@ -110,8 +110,9 @@ def check_headers(url):
 
     except Exception as e:
         logger.warning(f"Header check failed for {url}: {e}")
+        err_msg = "Connection failed or refused. Target may be unreachable." if "Max retries exceeded" in str(e) else str(e)
         results.append({'check': 'Security Headers', 'status': 'error', 'severity': 'high',
-                        'details': str(e), 'fix': 'Check that your website is reachable.'})
+                        'details': err_msg, 'fix': 'Check that your website is reachable on this port.'})
     return results
 
 
@@ -207,8 +208,9 @@ def check_software_versions(url):
     except Exception as e:
         # ✅ FIX: log instead of silent pass
         logger.warning(f"Version check failed for {url}: {e}")
+        err_msg = "Connection failed or refused." if "Max retries exceeded" in str(e) else str(e)
         results.append({'check': 'Software Version Check', 'status': 'error',
-                        'severity': 'info', 'details': str(e), 'fix': ''})
+                        'severity': 'info', 'details': err_msg, 'fix': ''})
     return results
 
 

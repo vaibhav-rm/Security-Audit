@@ -115,7 +115,10 @@ def scan():
     url = url.split()[0]
 
     if not url.startswith('http://') and not url.startswith('https://'):
-        url = 'https://' + url
+        if url.startswith('localhost') or re.match(r'^(127\.|192\.168\.|10\.)', url):
+            url = 'http://' + url
+        else:
+            url = 'https://' + url
 
     hostname = urlparse(url).hostname or ''
     if not hostname:

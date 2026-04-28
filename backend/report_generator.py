@@ -151,11 +151,12 @@ def generate_pdf_report(scan_result, output_dir=None):
         story.append(Spacer(1, 0.5*cm))
 
         # ── Stats row ──────────────────────────────────────────────────────
+        stats = scan_result.get('stats', {'critical': 0, 'warnings': 0, 'passed': 0, 'total': 0})
         stat_items = [
-            (str(stats['critical']), t['crit'], '#ef4444'),
-            (str(stats['warnings']), t['warn'], '#f59e0b'),
-            (str(stats['passed']),   t['pass'], '#22c55e'),
-            (str(stats['total']),    t['tot'],  '#0ea5e9'),
+            (str(stats.get('critical', 0)), t['crit'], '#ef4444'),
+            (str(stats.get('warnings', 0)), t['warn'], '#f59e0b'),
+            (str(stats.get('passed', 0)),   t['pass'], '#22c55e'),
+            (str(stats.get('total', 0)),    t['tot'],  '#0ea5e9'),
         ]
         stat_data = [[
             Paragraph(
