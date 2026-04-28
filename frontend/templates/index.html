@@ -1852,12 +1852,26 @@
       <div class="findings-list" id="findingsList"></div>
     </div>
 
+    <!-- NETWORK SWEEP RESULTS -->
+    <div id="network-results-section" style="display:none; animation: fadeUp 0.4s ease forwards;">
+      <div class="panel-header">
+        <span>🕸️</span>
+        <h3>Network Sweep Topology</h3>
+      </div>
+      <p style="color:var(--grey2); margin-top: 10px;" id="network-host-count"></p>
+      <div id="network-hosts-list" style="display:flex; flex-direction:column; gap:10px; margin-top:20px;"></div>
+      <div class="actions-row" style="margin-top:30px;">
+        <button class="btn-outline" onclick="location.reload()">🔄 Back to Web Scanner</button>
+      </div>
+    </div>
+
     <div id="advanced-scan-section" style="display:none;">
 
       <div class="panel-header">
         <span>🔬</span>
         <h3>Advanced Vulnerability Scan</h3>
         <span class="tool-badge badge-nmap">Nmap</span>
+        <span class="tool-badge badge-whatweb" style="background: rgba(14, 165, 233, 0.2); color: #7dd3fc; border: 1px solid rgba(14, 165, 233, 0.3);">WhatWeb</span>
         <span class="tool-badge badge-nikto">Nikto</span>
         <span class="tool-badge badge-sqlmap">SQLMap</span>
         <span class="tool-badge badge-osint" title="OSINT">crt.sh</span>
@@ -1893,6 +1907,11 @@
       <div id="adv-results-osint" class="adv-tool-result osint" style="display:none;">
         <div class="tool-title">🌐 OSINT — Subdomain Enumeration (crt.sh)</div>
         <div class="tool-body" id="adv-body-osint"></div>
+      </div>
+
+      <div id="adv-results-whatweb" class="adv-tool-result whatweb" style="display:none;">
+        <div class="tool-title">💻 WhatWeb — Technology Stack</div>
+        <div class="tool-body" id="adv-body-whatweb"></div>
       </div>
 
       <div id="adv-results-nmap" class="adv-tool-result nmap" style="display:none;">
@@ -2093,7 +2112,12 @@
 
       if (!url) {
         urlInput.focus();
-        showToast('Please enter a URL to scan', '⚠️');
+        showToast('Please enter a URL, IP, or CIDR to scan', '⚠️');
+        return;
+      }
+
+      if (url.includes('/') || url.includes(',')) {
+        runNetworkSweep(url);
         return;
       }
 
@@ -2174,6 +2198,90 @@
         document.getElementById('scanBtn').disabled = false;
         document.getElementById('btnIcon').textContent = '⚡';
         document.getElementById('btnText').textContent = 'Run Scan';
+      }
+    }
+
+    // ─────────────────────────────────────────
+    // Network Sweep Flow
+    // ─────────────────────────────────────────
+    async function runNetworkSweep(cidr) {
+      document.getElementById('errorBanner').style.display = 'none';
+      document.getElementById('results-section').style.display = 'none';
+      document.getElementById('network-results-section').style.display = 'none';
+      document.getElementById('historySection').style.display = 'none';
+      document.getElementById('advanced-scan-section').style.display = 'none';
+      document.getElementById('progress-section').style.display = 'block';
+      
+      document.getElementById('scanBtn').disabled = true;
+      document.getElementById('btnIcon').textContent = '⏳';
+      document.getElementById('btnText').textContent = 'Sweeping Subnet...';
+      
+      // Update check items text
+      const progressHeader = document.querySelector('.panel-header h3');
+      const originalText = progressHeader.textContent;
+      progressHeader.textContent = "Nmap Active Discovery";
+      document.getElementById('progressUrl').textContent = cidr;
+
+      document.querySelectorAll('.check-item').forEach(el => el.style.display = 'none');
+      const firstCheck = document.querySelector('.check-item');
+      firstCheck.style.display = 'flex';
+      firstCheck.querySelector('.check-name').textContent = "Pinging local nodes & performing fast port map";
+      firstCheck.classList.add('active');
+      firstCheck.querySelector('.check-status').textContent = 'running nmap (up to 2 mins)...';
+
+      try {
+        const resp = await fetch('/api/network-scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cidr })
+        });
+        
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.error || `Server error 500`);
+        }
+
+        const data = await resp.json();
+        if (data.error) throw new Error(data.error);
+
+        // Build Topology UI
+        document.getElementById('progress-section').style.display = 'none';
+        document.getElementById('network-results-section').style.display = 'block';
+        document.getElementById('network-host-count').innerHTML = `<strong>${data.hosts_up}</strong> Live Hosts Detected`;
+        
+        const listDiv = document.getElementById('network-hosts-list');
+        listDiv.innerHTML = data.hosts.map(h => `
+          <div style="background:var(--dark2); border:1px solid var(--border); padding:16px; border-radius:8px;">
+            <div style="display:flex; align-items:baseline; gap:12px;">
+              <span style="color:var(--green); font-size:18px;">🖥️</span>
+              <strong style="color:var(--blue); font-size:16px;">${h.ip}</strong>
+              ${h.hostname ? `<span style="color:var(--grey2); font-family:var(--mono); font-size:12px;">(${h.hostname})</span>` : ''}
+            </div>
+            <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; padding-left:30px;">
+              ${h.open_ports.length === 0 ? '<span style="color:var(--grey2); font-size:12px;">No open ports identified.</span>' : ''}
+              ${h.open_ports.map(p => `
+                <span style="background:rgba(14,165,233,0.1); border:1px solid rgba(14,165,233,0.3); padding:4px 10px; border-radius:6px; font-size:11px; font-family:var(--mono);">
+                  ${p.port}/${p.protocol} <strong style="color:var(--white); margin-left:6px;">${p.service.toUpperCase()}</strong>
+                </span>
+              `).join('')}
+            </div>
+          </div>
+        `).join('');
+
+      } catch (err) {
+        document.getElementById('progress-section').style.display = 'none';
+        document.getElementById('errorText').textContent = err.message;
+        document.getElementById('errorBanner').style.display = 'flex';
+      } finally {
+        document.getElementById('scanBtn').disabled = false;
+        document.getElementById('btnIcon').textContent = '⚡';
+        document.getElementById('btnText').textContent = 'Run Scan';
+        
+        // Restore progress section state for future web scans
+        progressHeader.textContent = originalText;
+        document.querySelectorAll('.check-item').forEach(el => el.style.display = 'flex');
+        firstCheck.querySelector('.check-name').textContent = "Verify DNS & Connection";
+        firstCheck.querySelector('.check-status').textContent = 'waiting...';
       }
     }
 
@@ -2567,6 +2675,28 @@ Scan your website free at PRAWL`;
       document.getElementById("adv-results-sqlmap").style.display = "block";
     }
 
+    // ── Render WhatWeb results ────────────────────────────────────
+    function renderWhatWeb(data) {
+      const el = document.getElementById("adv-body-whatweb");
+      if (data.error) { el.innerHTML = `<p style="color:#f87171">${data.error}</p>`; return; }
+
+      let html = "";
+      if (data.plugins && data.plugins.length) {
+        html += `<div style="display: flex; flex-wrap: wrap; gap: 8px;">`;
+        data.plugins.forEach(p => {
+          let badge = `<strong style="color:#a7f3d0">${p.name}</strong>`;
+          if (p.version) badge += ` <span style="color:#94a3b8">v${p.version}</span>`;
+          html += `<span style="background:var(--dark2);border:1px solid rgba(110,231,183,0.3);padding:6px 12px;border-radius:6px;font-family:var(--mono);font-size:12px;">${badge}</span>`;
+        });
+        html += `</div>`;
+      } else {
+        html += `<p style="color:#94a3b8">ℹ️ WhatWeb could not footprint any particular technology stack.</p>`;
+      }
+
+      el.innerHTML = html;
+      document.getElementById("adv-results-whatweb").style.display = "block";
+    }
+
     // ── Render OSINT results ──────────────────────────────────────
     function renderOsint(data) {
       const el = document.getElementById("adv-body-osint");
@@ -2596,7 +2726,7 @@ Scan your website free at PRAWL`;
       const consent = document.getElementById("sqlmap-consent").checked;
 
       // Reset results UI
-      ["nmap", "nikto", "sqlmap", "osint"].forEach(t => {
+      ["nmap", "whatweb", "nikto", "sqlmap", "osint"].forEach(t => {
         document.getElementById(`adv-results-${t}`).style.display = "none";
         document.getElementById(`adv-body-${t}`).innerHTML = "";
       });
@@ -2649,6 +2779,7 @@ Scan your website free at PRAWL`;
         }
 
         if (data.nmap)   renderNmap(data.nmap);
+        if (data.whatweb) renderWhatWeb(data.whatweb);
         if (data.nikto)  renderNikto(data.nikto);
         if (data.sqlmap) renderSqlmap(data.sqlmap);
         if (data.crt_sh) renderOsint(data.crt_sh);

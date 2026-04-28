@@ -136,6 +136,28 @@ def scan():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/network-scan', methods=['POST'])
+@limiter.limit("2 per minute")
+def network_scan():
+    """Execute a subnet sweep on a CIDR block or multiple IPs"""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid JSON'}), 400
+
+    cidr = data.get('cidr', '').strip()
+    if not cidr:
+        return jsonify({'error': 'No CIDR or IP range provided'}), 400
+    
+    logger.info(f"Network sweep requested for: {cidr}")
+    from network_scanner import run_network_sweep
+    try:
+        results = run_network_sweep(cidr)
+        return jsonify(results)
+    except Exception as e:
+        logger.error(f"Network scan failed for {cidr}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/history/<domain>')
 def history(domain):
     """Return scan history for a domain as JSON."""

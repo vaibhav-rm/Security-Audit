@@ -316,6 +316,25 @@ def generate_pdf_report(scan_result, output_dir=None):
                     ]))
                     story.append(t)
                     story.append(Spacer(1, 0.1*cm))
+            
+            ww = adv.get('whatweb', {})
+            if ww and not ww.get('error'):
+                plugins = ww.get('plugins', [])
+                if plugins:
+                    ww_text = ", ".join([f"{p['name']} (v{p['version']})" if p['version'] else p['name'] for p in plugins])
+                    adv_data = [[
+                        Paragraph(f'<font color="{BLUE.hexval()}"><b>TECH STACK</b></font>', ParagraphStyle('', fontName=UNICODE_FONT_BOLD, fontSize=8)),
+                        Paragraph(ww_text, body_style)
+                    ]]
+                    t = Table(adv_data, colWidths=[3.5*cm, 13.5*cm])
+                    t.setStyle(TableStyle([
+                        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#f0f9ff')),
+                        ('BOX', (0,0), (-1,-1), 0.5, BLUE),
+                        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+                        ('PADDING', (0,0), (-1,-1), 8)
+                    ]))
+                    story.append(t)
+                    story.append(Spacer(1, 0.1*cm))
                     
             crt = adv.get('crt_sh', {})
             if crt and not crt.get('error') and crt.get('count', 0) > 0:

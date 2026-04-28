@@ -33,11 +33,19 @@ else
 fi
 
 echo ""
-echo " [3/3] Pulling SQLMap ..."
+echo " [3/4] Pulling SQLMap ..."
 if ! docker pull secsi/sqlmap; then
     echo " WARNING: SQLMap pull failed."
 else
     echo " ✓ SQLMap ready."
+fi
+
+echo ""
+echo " [4/4] Pulling WhatWeb ..."
+if ! docker pull secsi/whatweb; then
+    echo " WARNING: WhatWeb pull failed."
+else
+    echo " ✓ WhatWeb ready."
 fi
 
 echo ""

@@ -408,6 +408,67 @@ def _parse_sqlmap_output(output: str, target: str) -> Dict[str, Any]:
 
 
 # ──────────────────────────────────────────────
+# WHATWEB (Technology Fingerprinting)
+# ──────────────────────────────────────────────
+
+def run_whatweb_scan(target: str) -> Dict[str, Any]:
+    """
+    Run WhatWeb inside Docker to fingerprint the technology stack.
+    Uses the secsi/whatweb image.
+    """
+    target = _ensure_protocol(target)
+
+    cmd = [
+        "docker", "run", "--rm",
+        "--network=host",
+        "secsi/whatweb",
+        "-a", "3", "--log-json", "-", "--quiet",
+        target
+    ]
+
+    stdout, stderr, code = _run_docker(cmd, timeout=90)
+
+    if code == -2:
+        return _whatweb_error("Docker not installed or not running.")
+    if code == -1:
+        return _whatweb_error("WhatWeb scan timed out (90 s).")
+
+    return _parse_whatweb_json(stdout, target)
+
+def _whatweb_error(msg: str) -> Dict[str, Any]:
+    return {"error": msg, "target": "", "plugins": [], "scan_tool": "whatweb"}
+
+def _parse_whatweb_json(output: str, target: str) -> Dict[str, Any]:
+    result: Dict[str, Any] = {
+        "scan_tool": "whatweb",
+        "target": target,
+        "plugins": [],
+    }
+
+    try:
+        start = output.find("[")
+        if start != -1:
+            clean_out = output[start:]
+            data = json.loads(clean_out)
+            if isinstance(data, list) and len(data) > 0:
+                plugins = data[0].get("plugins", {})
+                for name, details in plugins.items():
+                    if name.lower() in ["country", "ip"]:
+                        continue
+                    version = details.get("version", [""])[0] if "version" in details else ""
+                    string = details.get("string", [""])[0] if "string" in details else ""
+                    result["plugins"].append({
+                        "name": str(name),
+                        "version": str(version),
+                        "string": str(string)
+                    })
+    except json.JSONDecodeError:
+        result["error"] = "Failed to parse WhatWeb JSON output."
+    
+    return result
+
+
+# ──────────────────────────────────────────────
 # COMBINED ADVANCED SCAN (all three tools)
 # ──────────────────────────────────────────────
 
@@ -428,22 +489,25 @@ def run_full_advanced_scan(target: str, consent: bool = False) -> Dict[str, Any]
             "sqlmap":  None,
         }
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         f_nmap = executor.submit(run_nmap_scan, target)
         f_nikto = executor.submit(run_nikto_scan, target)
         f_sqlmap = executor.submit(run_sqlmap_scan, target) if consent else None
         f_crt = executor.submit(run_subdomain_scan, target)
+        f_whatweb = executor.submit(run_whatweb_scan, target)
 
         nmap_result = f_nmap.result()
         nikto_result = f_nikto.result()
         sqlmap_result = f_sqlmap.result() if f_sqlmap else {"scan_tool": "sqlmap", "skipped": True, "reason": "User consent not given"}
         crt_result = f_crt.result()
+        whatweb_result = f_whatweb.result()
 
     return {
         "target":  target,
         "nmap":    nmap_result,
         "nikto":   nikto_result,
         "sqlmap":  sqlmap_result,
+        "whatweb": whatweb_result,
         "crt_sh":  crt_result,
     }
 

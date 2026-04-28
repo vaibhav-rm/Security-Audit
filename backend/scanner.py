@@ -214,6 +214,94 @@ def check_software_versions(url):
     return results
 
 
+def check_cookies_secure(url):
+    try:
+        response = requests.get(url, timeout=10, allow_redirects=False)
+        cookies_header = response.headers.get('set-cookie', '').lower()
+        if not cookies_header:
+            return [{'check': 'Cookie Security', 'status': 'pass', 'severity': 'none', 
+                     'details': 'No session cookies are exposed directly on initialization.', 'fix': 'N/A'}]
+        
+        missing_secure = 'secure' not in cookies_header
+        missing_httponly = 'httponly' not in cookies_header
+        
+        if missing_secure and url.startswith('https://'):
+            return [{'check': 'Cookie Security', 'status': 'warning', 'severity': 'medium',
+                     'details': 'Cookies are missing the Secure flag, making them vulnerable to interception over unencrypted connections.',
+                     'fix': 'Set the Secure flag on all session cookies.'}]
+        if missing_httponly:
+            return [{'check': 'Cookie Security', 'status': 'warning', 'severity': 'medium',
+                     'details': 'Cookies are missing the HttpOnly flag, increasing risk of Cross-Site Scripting (XSS) token theft.',
+                     'fix': 'Set the HttpOnly flag on all sensitive cookies.'}]
+            
+        return [{'check': 'Cookie Security', 'status': 'pass', 'severity': 'none',
+                 'details': 'Cookies are configured securely.', 'fix': ''}]
+    except Exception as e:
+        return [{'check': 'Cookie Security', 'status': 'error', 'severity': 'info', 'details': f'Failed to check cookies: {str(e)}', 'fix': ''}]
+
+def check_cors(url):
+    try:
+        headers = {'Origin': 'https://evil.com'}
+        response = requests.get(url, headers=headers, timeout=10)
+        acao = response.headers.get('Access-Control-Allow-Origin', '')
+        if acao == '*' or acao == 'https://evil.com':
+            return [{'check': 'CORS Configuration', 'status': 'warning', 'severity': 'medium',
+                     'details': f"Overly permissive CORS policy detected (Access-Control-Allow-Origin: {acao}).",
+                     'fix': "Restrict CORS headers to trusted domains only instead of a wildcard."}]
+        return [{'check': 'CORS Configuration', 'status': 'pass', 'severity': 'none',
+                 'details': 'CORS policy appears restrictive.', 'fix': ''}]
+    except Exception as e:
+        return [{'check': 'CORS Configuration', 'status': 'error', 'severity': 'info', 'details': f'Failed to check CORS: {str(e)}', 'fix': ''}]
+
+def check_security_headers(url):
+    try:
+        response = requests.get(url, timeout=10, allow_redirects=False)
+        headers = {k.lower(): v.lower() for k, v in response.headers.items()}
+        results = []
+        
+        if 'x-frame-options' not in headers and 'content-security-policy' not in headers:
+            results.append({'check': 'Clickjacking Protection', 'status': 'warning', 'severity': 'medium', 'details': 'Missing X-Frame-Options or CSP frame-ancestors. Site may be vulnerable to Clickjacking.', 'fix': 'Add X-Frame-Options: DENY or SAMEORIGIN.'})
+        else:
+            results.append({'check': 'Clickjacking Protection', 'status': 'pass', 'severity': 'none', 'details': 'Anti-clickjacking headers are present.', 'fix': ''})
+            
+        if 'x-content-type-options' not in headers:
+            results.append({'check': 'MIME Sniffing', 'status': 'warning', 'severity': 'low', 'details': 'Missing X-Content-Type-Options header.', 'fix': 'Add X-Content-Type-Options: nosniff.'})
+        else:
+            results.append({'check': 'MIME Sniffing', 'status': 'pass', 'severity': 'none', 'details': 'MIME-sniffing protection enabled.', 'fix': ''})
+            
+        if url.startswith('https://'):
+            if 'strict-transport-security' not in headers:
+                results.append({'check': 'HSTS Check', 'status': 'warning', 'severity': 'medium', 'details': 'HTTP Strict-Transport-Security (HSTS) is not enabled.', 'fix': 'Add Strict-Transport-Security header to enforce secure connections.'})
+            else:
+                results.append({'check': 'HSTS Check', 'status': 'pass', 'severity': 'none', 'details': 'HSTS is enabled.', 'fix': ''})
+        
+        return results
+    except Exception as e:
+        return [{'check': 'Advanced Security Headers', 'status': 'error', 'severity': 'info', 'details': f'Failed to verify headers: {str(e)}', 'fix': ''}]
+
+def check_exposed_files(url):
+    base_url = url.rstrip('/')
+    results = []
+    
+    try:
+        env_resp = requests.get(base_url + '/.env', timeout=5, allow_redirects=False)
+        if env_resp.status_code == 200 and 'DB_' in env_resp.text:
+            results.append({'check': 'Exposed Secrets (.env)', 'status': 'fail', 'severity': 'critical', 'details': '.env configuration file is publicly exposed!', 'fix': 'Deny access to dotfiles located in the root web directory.'})
+    except:
+        pass
+        
+    try:
+        git_resp = requests.get(base_url + '/.git/config', timeout=5, allow_redirects=False)
+        if git_resp.status_code == 200 and '[core]' in git_resp.text:
+            results.append({'check': 'Exposed Codebase (.git)', 'status': 'fail', 'severity': 'critical', 'details': 'Git configuration folder is publicly exposed!', 'fix': 'Deny access to the .git directory immediately.'})
+    except:
+        pass
+
+    if not results:
+        results.append({'check': 'Sensitive Files Exposure', 'status': 'pass', 'severity': 'none', 'details': 'No common sensitive configuration files (.env, .git) exposed.', 'fix': ''})
+        
+    return results
+
 def calculate_score(findings):
     score        = 100
     deductions   = {'critical': 15, 'high': 10, 'medium': 5, 'low': 2, 'info': 0, 'none': 0}
@@ -320,6 +408,10 @@ def run_full_scan(url, language='english'):
     findings.extend(check_headers(url))
     findings.extend(check_open_ports(hostname))
     findings.extend(check_software_versions(url))
+    findings.extend(check_cookies_secure(url))
+    findings.extend(check_cors(url))
+    findings.extend(check_security_headers(url))
+    findings.extend(check_exposed_files(url))
 
     score                  = calculate_score(findings)
     risk_level, risk_color = get_risk_level(score, findings)
